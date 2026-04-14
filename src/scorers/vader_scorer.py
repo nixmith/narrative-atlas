@@ -56,13 +56,14 @@ class VaderScorer(BaseScorer):
         Returns:
             DataFrame with 'vader_score' (float) and 'vader_label' (str).
         """
-        # Implementation:
-        # scores = []
-        # for text in texts:
-        #     vs = self._analyzer.polarity_scores(text)
-        #     raw = vs["compound"]
-        #     score = normalize_score(raw, self.name, self.config)
-        #     label = score_to_label(score, self.config)
-        #     scores.append({"vader_score": score, "vader_label": label})
-        # return pd.DataFrame(scores)
-        raise NotImplementedError("Implement in Phase 1, Day 2")
+        scores = []
+        for text in texts:
+            vs = self._analyzer.polarity_scores(text)
+            raw = vs["compound"]
+            score = normalize_score(raw, self.name, self.config)
+            label = score_to_label(score, self.config)
+            scores.append({
+                f"{self.name}_score": score,
+                f"{self.name}_label": label,
+            })
+        return pd.DataFrame(scores)
