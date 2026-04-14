@@ -44,20 +44,46 @@ def load_headlines(config: dict) -> pd.DataFrame:
     Raises:
         ValueError: If loaded data has unexpected labels or empty texts.
     """
-    # Implementation steps:
-    # 1. Check if cached CSV exists at config path
-    # 2. If not, load from HuggingFace datasets library:
-    #      from datasets import load_dataset
-    #      ds = load_dataset("financial_phrasebank", config["data"]["fpb_config"])
-    #    The dataset has 'sentence' and 'label' columns.
-    #    Label mapping: {0: 'negative', 1: 'neutral', 2: 'positive'}
-    # 3. Convert to pandas DataFrame, rename columns to 'text' and 'true_label'
-    # 4. Stratified train/test split using config test_size and random seed
-    # 5. Add 'split' column
-    # 6. Save to CSV cache
-    # 7. Validate: no nulls, no empty strings, labels in expected set
-    # 8. Print summary: total count, label distribution, split sizes
-    raise NotImplementedError("Implement in Phase 1, Day 1")
+    cache_path = get_path(config, "raw_headlines")
+
+    if cache_path.exists():
+        df = pd.read_csv(cache_path)
+        print(f"  Loaded cached headlines: {len(df)} rows")
+    else:
+        from datasets import load_dataset
+        ds = load_dataset("financial_phrasebank", config["data"]["fpb_config"],
+                          trust_remote_code=True)
+        df = pd.DataFrame(ds["train"])
+
+        label_map = {0: "negative", 1: "neutral", 2: "positive"}
+        df["true_label"] = df["label"].map(label_map)
+        df = df.rename(columns={"sentence": "text"})
+        df = df[["text", "true_label"]]
+
+        train_df, test_df = train_test_split(
+            df,
+            test_size=config["data"]["test_size"],
+            stratify=df["true_label"],
+            random_state=get_seed(config),
+        )
+        train_df = train_df.copy()
+        test_df = test_df.copy()
+        train_df["split"] = "train"
+        test_df["split"] = "test"
+        df = pd.concat([train_df, test_df], ignore_index=True)
+
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(cache_path, index=False)
+        print(f"  Downloaded and cached: {len(df)} rows")
+
+    _validate_headlines(df)
+
+    print(f"  Label distribution:")
+    for label in ["positive", "neutral", "negative"]:
+        count = (df["true_label"] == label).sum()
+        print(f"    {label}: {count} ({count / len(df) * 100:.1f}%)")
+
+    return df
 
 
 def load_prices(config: dict) -> pd.DataFrame:
@@ -78,19 +104,34 @@ def load_prices(config: dict) -> pd.DataFrame:
     Raises:
         ValueError: If no price data returned for the configured ticker/range.
     """
-    # Implementation steps:
-    # 1. Check if cached CSV exists
-    # 2. If not, download:
-    #      import yfinance as yf
-    #      ticker = yf.Ticker(config["data"]["ticker"])
-    #      hist = ticker.history(start=config["data"]["price_start"],
-    #                            end=config["data"]["price_end"])
-    # 3. Keep only 'Close' column, rename to 'close'
-    # 4. Reset index to get 'Date' as column, rename to 'date'
-    # 5. Save to CSV cache
-    # 6. Validate: no nulls, dates are monotonically increasing
-    # 7. Print summary: date range, row count
-    raise NotImplementedError("Implement in Phase 1, Day 1")
+    cache_path = get_path(config, "raw_prices")
+
+    if cache_path.exists():
+        df = pd.read_csv(cache_path, parse_dates=["date"])
+        print(f"  Loaded cached prices: {len(df)} rows")
+    else:
+        import yfinance as yf
+        ticker = yf.Ticker(config["data"]["ticker"])
+        hist = ticker.history(
+            start=config["data"]["price_start"],
+            end=config["data"]["price_end"],
+        )
+        if hist.empty:
+            raise ValueError(
+                f"No price data returned for {config['data']['ticker']} "
+                f"({config['data']['price_start']} to {config['data']['price_end']})"
+            )
+        df = hist[["Close"]].reset_index()
+        df.columns = ["date", "close"]
+        df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
+
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(cache_path, index=False)
+        print(f"  Downloaded and cached: {len(df)} rows")
+
+    _validate_prices(df)
+    print(f"  Prices: {len(df)} days, {df['date'].min().date()} to {df['date'].max().date()}")
+    return df
 
 
 def _validate_headlines(df: pd.DataFrame) -> None:
@@ -107,7 +148,22 @@ def _validate_headlines(df: pd.DataFrame) -> None:
     Raises:
         ValueError: With descriptive message if any check fails.
     """
-    raise NotImplementedError("Implement in Phase 1, Day 1")
+    if df.isnull().any().any():
+        raise ValueError(f"Null values found in headlines DataFrame")
+    if (df["text"].str.len() == 0).any():
+        raise ValueError("Empty strings found in 'text' column")
+    expected_labels = {"positive", "neutral", "negative"}
+    actual_labels = set(df["true_label"].unique())
+    if actual_labels != expected_labels:
+        raise ValueError(f"Unexpected labels: {actual_labels}, expected {expected_labels}")
+    expected_splits = {"train", "test"}
+    actual_splits = set(df["split"].unique())
+    if actual_splits != expected_splits:
+        raise ValueError(f"Unexpected splits: {actual_splits}, expected {expected_splits}")
+    for split in ["train", "test"]:
+        count = (df["split"] == split).sum()
+        if count < 100:
+            raise ValueError(f"Only {count} rows in '{split}' split, expected at least 100")
 
 
 def _validate_prices(df: pd.DataFrame) -> None:
@@ -122,4 +178,9 @@ def _validate_prices(df: pd.DataFrame) -> None:
     Raises:
         ValueError: With descriptive message if any check fails.
     """
-    raise NotImplementedError("Implement in Phase 1, Day 1")
+    if df.isnull().any().any():
+        raise ValueError("Null values found in prices DataFrame")
+    if (df["close"] <= 0).any():
+        raise ValueError("Non-positive close prices found")
+    if len(df) < 200:
+        raise ValueError(f"Only {len(df)} trading days, expected at least 200")
