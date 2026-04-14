@@ -1,0 +1,69 @@
+# Narrative Atlas — Configuration
+# All tunable parameters in one place. No magic numbers in source code.
+
+project:
+  name: "Narrative Atlas"
+  random_seed: 42
+
+data:
+  fpb_config: "sentences_50agree"
+  test_size: 0.20
+  ticker: "AAPL"
+  price_start: "2020-01-01"
+  price_end: "2025-12-31"
+  paths:
+    raw_headlines: "data/raw/financial_phrasebank.csv"
+    raw_prices: "data/raw/aapl_prices.csv"
+    scored_headlines: "data/processed/headlines_scored.csv"
+    weekly_aggregated: "data/processed/weekly_aggregated.csv"
+
+preprocessing:
+  lowercase: true
+  remove_punctuation: false
+  remove_numbers: false
+  min_token_length: 1
+
+scorers:
+  vader:
+    enabled: true
+    name: "vader"
+  logreg:
+    enabled: true
+    name: "logreg"
+    max_features: 10000
+    ngram_range: [1, 2]
+    max_iter: 1000
+    class_weight: "balanced"
+    model_path: "models/logreg_tfidf_pipeline.pkl"
+  finbert:
+    enabled: true
+    name: "finbert"
+    model_name: "ProsusAI/finbert"
+    batch_size: 16
+    device: "auto"
+
+normalizer:
+  score_range: [-1.0, 1.0]
+  positive_threshold: 0.1
+  negative_threshold: -0.1
+
+evaluation:
+  metrics: ["accuracy", "f1_macro", "f1_per_class", "cohens_kappa"]
+  correlation_methods: ["pearson", "spearman"]
+
+visualization:
+  dpi: 300
+  figsize_timeline: [10, 4]
+  figsize_distributions: [8, 4]
+  figsize_agreement: [6, 5]
+  figsize_spectrogram: [10, 5]
+  figsize_scatter: [7, 5]
+  rolling_window: 7
+  colors:
+    vader: "#D85A30"
+    logreg: "#1D9E75"
+    finbert: "#3266AD"
+    price: "#888888"
+    positive: "#1D9E75"
+    negative: "#E24B4A"
+  output_dir: "figures"
