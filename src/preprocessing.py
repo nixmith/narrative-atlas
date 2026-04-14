@@ -38,13 +38,20 @@ def preprocess(df: pd.DataFrame, config: dict) -> pd.DataFrame:
     Raises:
         ValueError: If any text becomes empty after preprocessing.
     """
-    # Implementation steps:
-    # 1. df["text_clean"] = df["text"].str.strip()
-    # 2. Apply _normalize_unicode to each value
-    # 3. If config["preprocessing"]["lowercase"]: lowercase it
-    # 4. Collapse whitespace: re.sub(r'\s+', ' ', text)
-    # 5. Check for empty strings, raise if any found
-    raise NotImplementedError("Implement in Phase 1, Day 1")
+    df = df.copy()
+    df["text_clean"] = df["text"].str.strip()
+    df["text_clean"] = df["text_clean"].apply(_normalize_unicode)
+
+    if config["preprocessing"]["lowercase"]:
+        df["text_clean"] = df["text_clean"].str.lower()
+
+    df["text_clean"] = df["text_clean"].str.replace(r'\s+', ' ', regex=True)
+
+    empty_mask = df["text_clean"].str.len() == 0
+    if empty_mask.any():
+        raise ValueError(f"{empty_mask.sum()} texts became empty after preprocessing.")
+
+    return df
 
 
 def _normalize_unicode(text: str) -> str:
