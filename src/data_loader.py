@@ -148,6 +148,13 @@ def _validate_headlines(df: pd.DataFrame) -> None:
     Raises:
         ValueError: With descriptive message if any check fails.
     """
+    required = {"text", "true_label", "split"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"Headlines DataFrame missing required columns: {missing}. "
+            f"Cache file may be corrupted — delete data/raw/financial_phrasebank.csv and re-run."
+        )
     if df.isnull().any().any():
         raise ValueError(f"Null values found in headlines DataFrame")
     if (df["text"].str.len() == 0).any():
@@ -178,6 +185,13 @@ def _validate_prices(df: pd.DataFrame) -> None:
     Raises:
         ValueError: With descriptive message if any check fails.
     """
+    required = {"date", "close"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"Prices DataFrame missing required columns: {missing}. "
+            f"Cache file may be corrupted — delete data/raw/aapl_prices.csv and re-run."
+        )
     if df.isnull().any().any():
         raise ValueError("Null values found in prices DataFrame")
     if (df["close"] <= 0).any():

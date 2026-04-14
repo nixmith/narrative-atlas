@@ -58,8 +58,12 @@ def _normalize_unicode(text: str) -> str:
     """
     Normalize unicode characters to NFKD form.
 
-    Converts smart quotes to straight quotes, normalizes dashes,
-    and handles other unicode variations common in financial news.
+    NFKD decomposes compatibility characters — e.g. accented Latin letters
+    decompose into base + combining mark, ligatures split into their component
+    letters, and full-width characters collapse to ASCII-width. Smart quotes
+    and typographic dashes are *not* affected by NFKD because they have no
+    compatibility decomposition; callers should not rely on this function for
+    quote/dash canonicalization.
 
     Args:
         text: Raw input string.

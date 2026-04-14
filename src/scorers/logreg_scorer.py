@@ -79,7 +79,34 @@ class LogRegScorer(BaseScorer):
         Raises:
             ValueError: If texts and labels have different lengths.
         """
-        raise NotImplementedError("Implement in Phase 1, Day 3")
+        if len(texts) != len(labels):
+            raise ValueError(
+                f"texts ({len(texts)}) and labels ({len(labels)}) must have same length"
+            )
+
+        seed = get_seed(self.config)
+        cfg = self._scorer_config
+
+        self._pipeline = Pipeline([
+            ("tfidf", TfidfVectorizer(
+                max_features=cfg["max_features"],
+                ngram_range=tuple(cfg["ngram_range"]),
+            )),
+            ("clf", LogisticRegression(
+                max_iter=cfg["max_iter"],
+                class_weight=cfg["class_weight"],
+                random_state=seed,
+            )),
+        ])
+
+        self._pipeline.fit(texts, labels)
+
+        self._model_path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(self._pipeline, self._model_path)
+
+        train_acc = self._pipeline.score(texts, labels)
+        print(f"    Trained. Train accuracy: {train_acc:.3f}")
+        print(f"    Model saved to {self._model_path}")
 
     def is_trained(self) -> bool:
         """Check if a saved model file exists on disk."""
@@ -117,4 +144,21 @@ class LogRegScorer(BaseScorer):
         Raises:
             RuntimeError: If model has not been trained.
         """
-        raise NotImplementedError("Implement in Phase 1, Day 3")
+        self._load_pipeline()
+
+        probs = self._pipeline.predict_proba(texts)
+        classes = list(self._pipeline.classes_)
+        pos_idx = classes.index("positive")
+        neg_idx = classes.index("negative")
+
+        raw_scores = probs[:, pos_idx] - probs[:, neg_idx]
+
+        scores = []
+        for raw in raw_scores:
+            score = normalize_score(float(raw), self.name, self.config)
+            label = score_to_label(score, self.config)
+            scores.append({
+                f"{self.name}_score": score,
+                f"{self.name}_label": label,
+            })
+        return pd.DataFrame(scores)

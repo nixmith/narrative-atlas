@@ -19,9 +19,11 @@ data:
 
 preprocessing:
   lowercase: true
-  remove_punctuation: false
-  remove_numbers: false
-  min_token_length: 1
+  # NOTE: Preprocessing is intentionally minimal for financial text.
+  # We do NOT remove punctuation (VADER uses it as a signal) or
+  # numbers (financial figures carry meaning). No stemming or
+  # stopword removal — these would harm FinBERT and are unnecessary
+  # for TF-IDF on short, well-formed headlines.
 
 scorers:
   vader:

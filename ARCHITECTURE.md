@@ -185,9 +185,9 @@ data:
 
 preprocessing:
   lowercase: true
-  remove_punctuation: false            # Keep punctuation — VADER uses it
-  remove_numbers: false                # Keep numbers — financial text needs them
-  min_token_length: 1
+  # Preprocessing is intentionally minimal for financial text.
+  # We do NOT remove punctuation (VADER uses it as a signal) or numbers
+  # (financial figures carry meaning). No stemming or stopword removal.
 
 scorers:
   vader:
