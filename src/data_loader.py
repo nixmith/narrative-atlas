@@ -18,8 +18,6 @@ Usage:
 """
 
 import pandas as pd
-import numpy as np
-from pathlib import Path
 from sklearn.model_selection import train_test_split
 
 from src.config import get_path, get_seed
@@ -42,7 +40,10 @@ def load_headlines(config: dict) -> pd.DataFrame:
             split: str       — 'train' or 'test'
 
     Raises:
-        ValueError: If loaded data has unexpected labels or empty texts.
+        ValueError: If loaded data fails validation — missing required
+            columns (e.g. corrupted cache), null values, empty strings,
+            unexpected label set, unexpected split set, or fewer than
+            100 rows in either split.
     """
     cache_path = get_path(config, "raw_headlines")
 
@@ -98,11 +99,15 @@ def load_prices(config: dict) -> pd.DataFrame:
 
     Returns:
         DataFrame with columns:
-            date: datetime  — trading date (also set as index)
-            close: float    — adjusted close price
+            date: datetime  — trading date (timezone-stripped, column only,
+                              not set as index)
+            close: float    — close price
 
     Raises:
-        ValueError: If no price data returned for the configured ticker/range.
+        ValueError: If no price data returned for the configured
+            ticker/range, if the cache file is missing required columns,
+            if any values are null, if any close price is non-positive,
+            or if fewer than 200 trading days are present.
     """
     cache_path = get_path(config, "raw_prices")
 

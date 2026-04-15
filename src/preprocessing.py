@@ -12,7 +12,6 @@ Usage:
 """
 
 import unicodedata
-import re
 
 import pandas as pd
 
@@ -23,7 +22,9 @@ def preprocess(df: pd.DataFrame, config: dict) -> pd.DataFrame:
 
     Steps applied (in order):
       1. Strip leading/trailing whitespace
-      2. Normalize unicode to NFKD form (handles smart quotes, etc.)
+      2. Normalize unicode to NFKD form (decomposes accented letters,
+         ligatures, and full-width characters — see _normalize_unicode
+         for what NFKD does and does not cover)
       3. Optionally lowercase (config['preprocessing']['lowercase'])
       4. Collapse multiple whitespace characters to single space
       5. Validate: no empty strings after cleaning

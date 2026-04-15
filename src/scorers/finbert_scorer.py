@@ -68,7 +68,37 @@ class FinBERTScorer(BaseScorer):
              If not, raise ValueError with the actual mapping
           7. Print: "FinBERT loaded on {device}"
         """
-        raise NotImplementedError("Implement in Phase 1, Day 4")
+        if self._model is not None:
+            return
+
+        cfg = self._scorer_config
+        device_str = cfg["device"]
+
+        if device_str == "auto":
+            if torch.cuda.is_available():
+                self._device = torch.device("cuda")
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                self._device = torch.device("mps")
+            else:
+                self._device = torch.device("cpu")
+        else:
+            self._device = torch.device(device_str)
+
+        print(f"    Loading FinBERT on {self._device}...")
+        self._tokenizer = AutoTokenizer.from_pretrained(cfg["model_name"])
+        self._model = AutoModelForSequenceClassification.from_pretrained(cfg["model_name"])
+        self._model.to(self._device)
+        self._model.eval()
+
+        expected = {0: "positive", 1: "negative", 2: "neutral"}
+        actual = self._model.config.id2label
+        if actual != expected:
+            raise ValueError(
+                f"FinBERT label order changed! Expected {expected}, got {actual}. "
+                f"Update pos_idx/neg_idx in score_batch."
+            )
+
+        print(f"    FinBERT loaded. Labels: {actual}")
 
     def score_batch(self, texts: list[str]) -> pd.DataFrame:
         """
@@ -96,4 +126,35 @@ class FinBERTScorer(BaseScorer):
         Returns:
             DataFrame with 'finbert_score' (float) and 'finbert_label' (str).
         """
-        raise NotImplementedError("Implement in Phase 1, Day 4")
+        self._ensure_loaded()
+
+        batch_size = self._scorer_config["batch_size"]
+        all_scores = []
+
+        for i in tqdm(range(0, len(texts), batch_size), desc="FinBERT scoring"):
+            batch = texts[i : i + batch_size]
+            inputs = self._tokenizer(
+                batch,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=512,
+            ).to(self._device)
+
+            with torch.no_grad():
+                logits = self._model(**inputs).logits
+
+            probs = torch.softmax(logits, dim=1).cpu().numpy()
+            # id2label: 0=positive, 1=negative, 2=neutral
+            batch_raw = probs[:, 0] - probs[:, 1]
+            all_scores.extend(batch_raw)
+
+        results = []
+        for raw in all_scores:
+            score = normalize_score(float(raw), self.name, self.config)
+            label = score_to_label(score, self.config)
+            results.append({
+                f"{self.name}_score": score,
+                f"{self.name}_label": label,
+            })
+        return pd.DataFrame(results)
