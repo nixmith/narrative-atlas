@@ -107,7 +107,53 @@ def fig1_sentiment_timeline(
         prices_df: Price DataFrame with 'date' and 'close'.
         config: Loaded config dict.
     """
-    raise NotImplementedError("Implement in Phase 2, Day 7")
+    colors = _get_colors(config)
+    window = config["visualization"]["rolling_window"]
+    figsize = config["visualization"]["figsize_timeline"]
+
+    df = df.copy()
+    df["date"] = pd.to_datetime(df["date"])
+    daily = df.groupby("date").agg(
+        vader=("vader_score", "mean"),
+        logreg=("logreg_score", "mean"),
+        finbert=("finbert_score", "mean"),
+    ).sort_index()
+
+    fig, ax1 = plt.subplots(figsize=figsize)
+
+    for method in METHODS:
+        rolled = daily[method].rolling(window, min_periods=1).mean()
+        ax1.plot(
+            daily.index, rolled,
+            color=colors[method], linewidth=1.5,
+            label=METHOD_DISPLAY[method], alpha=0.85,
+        )
+
+    ax1.set_ylabel("Sentiment Score (rolling mean)")
+    ax1.set_ylim(-0.6, 0.8)
+    ax1.axhline(0, color="gray", linewidth=0.5, linestyle="--", alpha=0.5)
+
+    ax2 = ax1.twinx()
+    prices_plot = prices_df.copy()
+    prices_plot["date"] = pd.to_datetime(prices_plot["date"])
+    prices_plot = prices_plot.set_index("date")
+    price_range = prices_plot.loc[daily.index.min():daily.index.max()]
+    ax2.fill_between(
+        price_range.index, price_range["close"],
+        alpha=0.1, color=colors["price"],
+    )
+    ax2.plot(
+        price_range.index, price_range["close"],
+        color=colors["price"], linewidth=0.8, alpha=0.3,
+    )
+    ax2.set_ylabel(f"{config['data']['ticker']} Close ($)")
+
+    ax1.legend(loc="upper left", fontsize=9)
+    ax1.set_xlabel("Date")
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
+    fig.autofmt_xdate()
+
+    _save_figure(fig, "fig1_sentiment_timeline.png", config)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -135,7 +181,29 @@ def fig2_sentiment_distributions(df: pd.DataFrame, config: dict) -> None:
         df: Scored DataFrame.
         config: Loaded config dict.
     """
-    raise NotImplementedError("Implement in Phase 2, Day 8")
+    colors = _get_colors(config)
+    figsize = config["visualization"]["figsize_distributions"]
+
+    score_data = []
+    for method in METHODS:
+        scores = df[f"{method}_score"].values
+        for s in scores:
+            score_data.append({"method": METHOD_DISPLAY[method], "score": s})
+    melted = pd.DataFrame(score_data)
+
+    palette = {METHOD_DISPLAY[m]: colors[m] for m in METHODS}
+
+    fig, ax = plt.subplots(figsize=figsize)
+    sns.violinplot(
+        x="method", y="score", data=melted,
+        palette=palette, inner="quartile", ax=ax, cut=0,
+    )
+    ax.axhline(0, color="gray", linewidth=0.5, linestyle="--", alpha=0.5)
+    ax.set_xlabel("Method")
+    ax.set_ylabel("Sentiment Score")
+    ax.set_title("Score Distribution by Method")
+
+    _save_figure(fig, "fig2_sentiment_distributions.png", config)
 
 
 # ─────────────────────────────────────────────────────────────

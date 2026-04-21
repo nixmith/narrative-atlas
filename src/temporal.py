@@ -46,13 +46,26 @@ def assign_dates(df: pd.DataFrame, config: dict) -> pd.DataFrame:
         real temporal signals. The value is in demonstrating the
         visualization and analysis infrastructure.
     """
-    # Implementation:
-    # 1. Create date range from config price_start to price_end (business days only)
-    # 2. Shuffle df with seed for reproducibility
-    # 3. Assign dates by cycling through the date range
-    #    (multiple headlines can share a date)
-    # 4. Sort by date
-    raise NotImplementedError("Implement in Phase 2, Day 6")
+    import numpy as np
+    from src.config import get_seed
+
+    seed = get_seed(config)
+    start = pd.to_datetime(config["data"]["price_start"])
+    end = pd.to_datetime(config["data"]["price_end"])
+
+    bdays = pd.bdate_range(start, end)
+
+    rng = np.random.RandomState(seed)
+    shuffled_idx = rng.permutation(len(df))
+
+    dates = [bdays[i % len(bdays)] for i in range(len(df))]
+
+    df = df.copy()
+    df = df.iloc[shuffled_idx].reset_index(drop=True)
+    df["date"] = dates[:len(df)]
+    df = df.sort_values("date").reset_index(drop=True)
+
+    return df
 
 
 def aggregate_weekly(df: pd.DataFrame, prices_df: pd.DataFrame) -> pd.DataFrame:
@@ -76,16 +89,46 @@ def aggregate_weekly(df: pd.DataFrame, prices_df: pd.DataFrame) -> pd.DataFrame:
 
         Saved to data/processed/weekly_aggregated.csv
     """
-    # Implementation:
-    # 1. headlines: group by pd.Grouper(key='date', freq='W-MON')
-    # 2. Compute mean score per method, count, std for finbert
-    # 3. prices: resample to weekly, compute weekly return =
-    #    (last_close - first_close) / first_close
-    # 4. Merge on week_start
-    # 5. next_return = weekly_return.shift(-1) — this is the NEXT week's return
-    # 6. Drop rows with NaN next_return (last week has no future)
-    # 7. Save to CSV
-    raise NotImplementedError("Implement in Phase 2, Day 6")
+    df["date"] = pd.to_datetime(df["date"])
+    prices_df = prices_df.copy()
+    prices_df["date"] = pd.to_datetime(prices_df["date"])
+
+    df["week_start"] = df["date"].dt.to_period("W-MON").dt.start_time
+    weekly_sent = df.groupby("week_start").agg(
+        volume=("date", "count"),
+        vader_mean=("vader_score", "mean"),
+        logreg_mean=("logreg_score", "mean"),
+        finbert_mean=("finbert_score", "mean"),
+        finbert_std=("finbert_score", "std"),
+    ).reset_index()
+
+    prices_df["week_start"] = prices_df["date"].dt.to_period("W-MON").dt.start_time
+    weekly_price = prices_df.groupby("week_start").agg(
+        open_price=("close", "first"),
+        close_price=("close", "last"),
+    ).reset_index()
+    weekly_price["weekly_return"] = (
+        (weekly_price["close_price"] - weekly_price["open_price"])
+        / weekly_price["open_price"]
+    )
+
+    weekly = pd.merge(
+        weekly_sent,
+        weekly_price[["week_start", "weekly_return"]],
+        on="week_start",
+        how="inner",
+    )
+
+    weekly["next_return"] = weekly["weekly_return"].shift(-1)
+    weekly = weekly.dropna(subset=["next_return"])
+
+    from src.config import get_path, load_config
+    config = load_config()
+    path = get_path(config, "weekly_aggregated")
+    weekly.to_csv(path, index=False)
+    print(f"  Saved weekly aggregation: {len(weekly)} weeks to {path}")
+
+    return weekly
 
 
 def compute_correlations(weekly_df: pd.DataFrame, config: dict) -> dict:
@@ -107,11 +150,31 @@ def compute_correlations(weekly_df: pd.DataFrame, config: dict) -> dict:
 
     Also prints formatted correlation table.
     """
-    # Implementation:
-    # For each method in METHODS:
-    #   x = weekly_df[f"{method}_mean"]
-    #   y = weekly_df["next_return"]
-    #   Drop any NaN pairs
-    #   pearson_r, pearson_p = stats.pearsonr(x, y)
-    #   spearman_rho, spearman_p = stats.spearmanr(x, y)
-    raise NotImplementedError("Implement in Phase 2, Day 6")
+    results = {}
+    print("\n" + "=" * 55)
+    print("Sentiment-Return Correlations")
+    print("=" * 55)
+    header_pearson = "Pearson r"
+    header_spearman = "Spearman rho"
+    print(f"{'Method':<10} {header_pearson:>10} {'p-value':>10} {header_spearman:>14} {'p-value':>10}")
+    print("-" * 55)
+
+    for method in METHODS:
+        col = f"{method}_mean"
+        x = weekly_df[col].dropna()
+        y = weekly_df.loc[x.index, "next_return"].dropna()
+        common = x.index.intersection(y.index)
+        x, y = x.loc[common], y.loc[common]
+
+        pr, pp = stats.pearsonr(x, y)
+        sr, sp = stats.spearmanr(x, y)
+
+        results[method] = {
+            "pearson_r": pr,
+            "pearson_p": pp,
+            "spearman_rho": sr,
+            "spearman_p": sp,
+        }
+        print(f"{method:<10} {pr:>10.4f} {pp:>10.4f} {sr:>14.4f} {sp:>10.4f}")
+
+    return results
