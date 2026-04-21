@@ -45,13 +45,18 @@ def evaluate_classifier(
             'classification_report': dict (sklearn format, includes per-class P/R/F1)
             'confusion_matrix': np.ndarray (3x3, rows=true, cols=predicted)
     """
-    # Implementation:
-    # 1. accuracy = accuracy_score(true_labels, predicted_labels)
-    # 2. report = classification_report(true_labels, predicted_labels,
-    #                labels=LABEL_ORDER, output_dict=True, zero_division=0)
-    # 3. cm = confusion_matrix(true_labels, predicted_labels, labels=LABEL_ORDER)
-    # 4. Return dict
-    raise NotImplementedError("Implement in Phase 2, Day 5")
+    acc = accuracy_score(true_labels, predicted_labels)
+    report = classification_report(
+        true_labels, predicted_labels,
+        labels=LABEL_ORDER, output_dict=True, zero_division=0
+    )
+    cm = confusion_matrix(true_labels, predicted_labels, labels=LABEL_ORDER)
+    return {
+        "method": method_name,
+        "accuracy": acc,
+        "classification_report": report,
+        "confusion_matrix": cm,
+    }
 
 
 def evaluate_agreement(
@@ -75,11 +80,13 @@ def evaluate_agreement(
             'agreement_pct': float (0-100)
             'cohens_kappa': float (-1 to +1)
     """
-    # Implementation:
-    # 1. agreement = sum(a == b for a, b in zip(labels_a, labels_b)) / len(labels_a) * 100
-    # 2. kappa = cohen_kappa_score(labels_a, labels_b)
-    # 3. Return dict
-    raise NotImplementedError("Implement in Phase 2, Day 5")
+    agreement = sum(a == b for a, b in zip(labels_a, labels_b)) / len(labels_a) * 100
+    kappa = cohen_kappa_score(labels_a, labels_b)
+    return {
+        "pair": f"{name_a}_vs_{name_b}",
+        "agreement_pct": agreement,
+        "cohens_kappa": kappa,
+    }
 
 
 def evaluate_all(df: pd.DataFrame, config: dict) -> dict:
@@ -100,16 +107,26 @@ def evaluate_all(df: pd.DataFrame, config: dict) -> dict:
         - Per-method per-class F1 table
         - Pairwise agreement + κ table
     """
-    # Implementation:
-    # 1. Filter to test split: test_df = df[df["split"] == "test"]
-    # 2. For each method in METHODS:
-    #      evaluate_classifier(test_df["true_label"], test_df[f"{method}_label"], method)
-    # 3. For each pair (i, j) where i < j in METHODS:
-    #      evaluate_agreement(df[f"{i}_label"], df[f"{j}_label"], i, j)
-    #      NOTE: Agreement computed on FULL dataset, not just test
-    # 4. Print formatted tables
-    # 5. Return nested dict
-    raise NotImplementedError("Implement in Phase 2, Day 5")
+    results = {"classifiers": {}, "agreement": {}}
+    test_df = df[df["split"] == "test"]
+
+    for method in METHODS:
+        results["classifiers"][method] = evaluate_classifier(
+            test_df["true_label"].tolist(),
+            test_df[f"{method}_label"].tolist(),
+            method,
+        )
+
+    for i, m1 in enumerate(METHODS):
+        for m2 in METHODS[i + 1:]:
+            key = f"{m1}_vs_{m2}"
+            results["agreement"][key] = evaluate_agreement(
+                df[f"{m1}_label"].tolist(),
+                df[f"{m2}_label"].tolist(),
+                m1, m2,
+            )
+
+    return results
 
 
 def print_summary(results: dict) -> None:
@@ -129,4 +146,25 @@ def print_summary(results: dict) -> None:
         VADER vs FinBERT    XX.X%        0.XXX
         LogReg vs FinBERT   XX.X%        0.XXX
     """
-    raise NotImplementedError("Implement in Phase 2, Day 5")
+    print("\n" + "=" * 62)
+    print("Classification Performance (Test Set)")
+    print("=" * 62)
+    print(f"{'Method':<10} {'Accuracy':>10} {'F1-macro':>10} {'F1-pos':>10} {'F1-neu':>10} {'F1-neg':>10}")
+    print("-" * 62)
+    for method in METHODS:
+        r = results["classifiers"][method]
+        cr = r["classification_report"]
+        print(f"{method:<10} {r['accuracy']:>10.3f} {cr['macro avg']['f1-score']:>10.3f} "
+              f"{cr['positive']['f1-score']:>10.3f} {cr['neutral']['f1-score']:>10.3f} "
+              f"{cr['negative']['f1-score']:>10.3f}")
+
+    print("\n" + "=" * 49)
+    print("Inter-Method Agreement (Full Dataset)")
+    print("=" * 49)
+    kappa_header = "Cohen's κ"
+    print(f"{'Pair':<25} {'Agreement%':>12} {kappa_header:>10}")
+    print("-" * 49)
+    for key, r in results["agreement"].items():
+        display = key.replace("_vs_", " vs ")
+        print(f"{display:<25} {r['agreement_pct']:>11.1f}% {r['cohens_kappa']:>10.3f}")
+    print()
