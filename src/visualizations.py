@@ -230,7 +230,38 @@ def fig3_method_agreement(df: pd.DataFrame, config: dict) -> None:
         df: Scored DataFrame.
         config: Loaded config dict.
     """
-    raise NotImplementedError("Implement in Phase 2, Day 9")
+    from sklearn.metrics import cohen_kappa_score
+    figsize = config["visualization"]["figsize_agreement"]
+
+    n = len(METHODS)
+    agreement_matrix = np.zeros((n, n))
+    annot_matrix = np.empty((n, n), dtype=object)
+
+    for i, m1 in enumerate(METHODS):
+        for j, m2 in enumerate(METHODS):
+            l1 = df[f"{m1}_label"]
+            l2 = df[f"{m2}_label"]
+            if i == j:
+                agreement_matrix[i][j] = 100.0
+                annot_matrix[i][j] = "100%\nkappa=1.00"
+            else:
+                agree = (l1 == l2).mean() * 100
+                kappa = cohen_kappa_score(l1, l2)
+                agreement_matrix[i][j] = agree
+                annot_matrix[i][j] = f"{agree:.1f}%\nkappa={kappa:.2f}"
+
+    display_names = [METHOD_DISPLAY[m] for m in METHODS]
+
+    fig, ax = plt.subplots(figsize=figsize)
+    sns.heatmap(
+        agreement_matrix, annot=annot_matrix, fmt="",
+        xticklabels=display_names, yticklabels=display_names,
+        cmap="YlOrRd", vmin=40, vmax=100, ax=ax,
+        linewidths=0.5, linecolor="white",
+    )
+    ax.set_title("Pairwise Label Agreement")
+
+    _save_figure(fig, "fig3_method_agreement.png", config)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -258,7 +289,47 @@ def fig4_keyword_spectrogram(df: pd.DataFrame, config: dict) -> None:
         df: Scored DataFrame with 'date' and 'text_clean' columns.
         config: Loaded config dict.
     """
-    raise NotImplementedError("Implement in Phase 3, Day 10")
+    figsize = config["visualization"]["figsize_spectrogram"]
+
+    tfidf = TfidfVectorizer(max_features=5000, stop_words="english")
+    tfidf_matrix = tfidf.fit_transform(df["text_clean"])
+    feature_names = tfidf.get_feature_names_out()
+
+    mean_weights = np.asarray(tfidf_matrix.mean(axis=0)).flatten()
+    top_indices = mean_weights.argsort()[-15:][::-1]
+    top_terms = feature_names[top_indices]
+
+    df = df.copy()
+    df["month"] = pd.to_datetime(df["date"]).dt.to_period("M")
+    months = sorted(df["month"].unique())
+
+    heatmap_data = np.zeros((len(top_terms), len(months)))
+    for j, month in enumerate(months):
+        month_texts = df[df["month"] == month]["text_clean"]
+        for i, term in enumerate(top_terms):
+            heatmap_data[i, j] = month_texts.str.contains(
+                r"\b" + term + r"\b", regex=True, case=False
+            ).sum()
+
+    row_maxes = heatmap_data.max(axis=1, keepdims=True)
+    row_maxes[row_maxes == 0] = 1
+    heatmap_data = heatmap_data / row_maxes
+
+    month_labels = [str(m) for m in months]
+
+    fig, ax = plt.subplots(figsize=figsize)
+    sns.heatmap(
+        heatmap_data,
+        xticklabels=month_labels, yticklabels=top_terms,
+        cmap="Blues", ax=ax, linewidths=0.5,
+    )
+    ax.set_xlabel("Month")
+    ax.set_ylabel("")
+    ax.set_title("Top TF-IDF Keywords Over Time (Row-Normalized)")
+    plt.xticks(rotation=45, ha="right", fontsize=8)
+    plt.yticks(fontsize=9)
+
+    _save_figure(fig, "fig4_keyword_spectrogram.png", config)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -289,7 +360,30 @@ def fig5_volume_sentiment_scatter(
         weekly_df: Weekly aggregated DataFrame from temporal.py.
         config: Loaded config dict.
     """
-    raise NotImplementedError("Implement in Phase 3, Day 11")
+    colors = _get_colors(config)
+    figsize = config["visualization"]["figsize_scatter"]
+
+    up = weekly_df[weekly_df["next_return"] > 0]
+    down = weekly_df[weekly_df["next_return"] <= 0]
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.scatter(
+        up["volume"], up["finbert_mean"],
+        c=colors["positive"], label="Next week up",
+        alpha=0.6, s=50, edgecolors="white", linewidth=0.3,
+    )
+    ax.scatter(
+        down["volume"], down["finbert_mean"],
+        c=colors["negative"], label="Next week down",
+        alpha=0.6, s=50, edgecolors="white", linewidth=0.3,
+    )
+    ax.set_xlabel("Weekly Article Volume")
+    ax.set_ylabel("Mean FinBERT Sentiment")
+    ax.set_title("Volume vs. Sentiment (Colored by Next-Week Return)")
+    ax.axhline(0, color="gray", linewidth=0.5, linestyle="--", alpha=0.5)
+    ax.legend(fontsize=9)
+
+    _save_figure(fig, "fig5_volume_sentiment_scatter.png", config)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -309,4 +403,22 @@ def generate_all_figures(config: dict) -> None:
       4. Call each fig*() function
       5. Print summary of generated figures
     """
-    raise NotImplementedError("Implement in Phases 2-3")
+    from src.data_loader import load_prices
+    from src.temporal import assign_dates, aggregate_weekly
+
+    setup_style(config)
+
+    scored_path = get_path(config, "scored_headlines")
+    df = pd.read_csv(scored_path)
+    prices_df = load_prices(config)
+
+    df = assign_dates(df, config)
+    weekly_df = aggregate_weekly(df, prices_df)
+
+    print("  Generating figures...")
+    fig1_sentiment_timeline(df, prices_df, config)
+    fig2_sentiment_distributions(df, config)
+    fig3_method_agreement(df, config)
+    fig4_keyword_spectrogram(df, config)
+    fig5_volume_sentiment_scatter(weekly_df, config)
+    print("  All 5 figures generated.")
