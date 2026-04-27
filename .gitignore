@@ -40,3 +40,9 @@ notebooks/.ipynb_checkpoints/
 
 # Transformer model cache (large, downloaded at runtime)
 .cache/
+
+# Experimental run outputs (reproducible from harness; not committed)
+experiments/*/*/outputs/
+
+# Experimental run outputs (reproducible from harness; not committed)
+experiments/*/*/outputs/
